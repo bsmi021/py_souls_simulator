@@ -1,5 +1,6 @@
 from enum import Enum
 import random
+from src.item_system import Weapon, Armor
 
 class AttackType(Enum):
     LIGHT = 1
@@ -16,7 +17,13 @@ class CombatSystem:
     def attack(attacker, target, attack_type):
         """Performs an attack action."""
         if CombatSystem.can_perform_attack(attacker, attack_type):
-            damage = CombatSystem.calculate_damage(attacker, target, attack_type)
+            weapon = attacker.equipment.get_equipped_weapon()
+            if weapon is None:
+                base_damage = attacker.strength  # Unarmed attack
+            else:
+                base_damage = weapon.damage
+
+            damage = CombatSystem.calculate_damage(attacker, target, attack_type, base_damage)
             poise_damage = CombatSystem.calculate_poise_damage(attacker, attack_type)
             
             if not CombatSystem.is_attack_dodged(target):
@@ -32,30 +39,34 @@ class CombatSystem:
     @staticmethod
     def can_perform_attack(attacker, attack_type):
         """Checks if the attacker has enough stamina to perform the attack."""
-        stamina_cost = CombatSystem.get_stamina_cost(attack_type)
+        stamina_cost = CombatSystem.get_stamina_cost(attacker, attack_type)
         return attacker.stamina >= stamina_cost
 
     @staticmethod
-    def get_stamina_cost(attack_type):
+    def get_stamina_cost(attacker, attack_type):
         """Returns the stamina cost for a given attack type."""
+        weapon = attacker.equipment.get_equipped_weapon()
+        base_cost = 20 if weapon is None else weapon.attack_speed * 15
+
         if attack_type == AttackType.LIGHT:
-            return 20
+            return base_cost
         elif attack_type == AttackType.HEAVY:
-            return 35
+            return base_cost * 1.5
         elif attack_type == AttackType.SKILL:
-            return 50
+            return base_cost * 2
 
     @staticmethod
     def consume_stamina(attacker, attack_type):
         """Consumes stamina based on the attack type."""
-        stamina_cost = CombatSystem.get_stamina_cost(attack_type)
+        stamina_cost = CombatSystem.get_stamina_cost(attacker, attack_type)
         attacker.stamina = max(0, attacker.stamina - stamina_cost)
 
     @staticmethod
     def dodge(agent, direction):
         """Performs a dodge action."""
-        if agent.stamina >= 20:
-            agent.stamina -= 20
+        dodge_cost = 20 - (agent.dexterity * 0.2)
+        if agent.stamina >= dodge_cost:
+            agent.stamina -= dodge_cost
             agent.apply_status_effect("invulnerable")  # Apply temporary invulnerability
             agent.move(direction)
             return True
@@ -64,34 +75,39 @@ class CombatSystem:
     @staticmethod
     def parry(agent):
         """Performs a parry action."""
-        if agent.stamina >= 15:
-            agent.stamina -= 15
+        parry_cost = 15 - (agent.dexterity * 0.1)
+        if agent.stamina >= parry_cost:
+            agent.stamina -= parry_cost
             agent.apply_status_effect("parrying")  # Apply parrying status
             return True
         return False
 
     @staticmethod
-    def calculate_damage(attacker, target, attack_type):
+    def calculate_damage(attacker, target, attack_type, base_damage):
         """Calculates the damage dealt in an attack."""
-        base_damage = attacker.strength * 2
+        strength_bonus = attacker.strength * 0.5
+        dexterity_bonus = attacker.dexterity * 0.3
+
         if attack_type == AttackType.LIGHT:
-            damage = base_damage * 1.0
+            damage = base_damage * 1.0 + strength_bonus + dexterity_bonus
         elif attack_type == AttackType.HEAVY:
-            damage = base_damage * 1.5
+            damage = base_damage * 1.5 + (strength_bonus * 1.5) + dexterity_bonus
         elif attack_type == AttackType.SKILL:
-            damage = base_damage * 2.0
+            damage = base_damage * 2.0 + strength_bonus + (dexterity_bonus * 1.5)
 
         if CombatSystem.calculate_critical_hit(attacker, target):
             damage *= 1.5
 
-        damage_reduction = target.vitality * 0.5
-        final_damage = max(1, damage - damage_reduction)
+        defense = target.equipment.get_total_defense()
+        final_damage = max(1, damage - defense)  # Ensure at least 1 damage is dealt
         return final_damage
 
     @staticmethod
     def calculate_poise_damage(attacker, attack_type):
         """Calculates the poise damage dealt by an attack."""
-        base_poise_damage = attacker.strength
+        weapon = attacker.equipment.get_equipped_weapon()
+        base_poise_damage = attacker.strength + (weapon.damage if weapon else 0)
+        
         if attack_type == AttackType.LIGHT:
             return base_poise_damage * 1.0
         elif attack_type == AttackType.HEAVY:

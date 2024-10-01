@@ -3,6 +3,7 @@ from enum import Enum
 from src.combat_system import CombatSystem
 from src.ai_behavior import AIController
 from src.item_system import Inventory, Equipment, create_basic_equipment
+from src.skills import get_skill
 
 class AgentType(Enum):
     PLAYER = 0
@@ -39,11 +40,27 @@ class SoulslikeAgent(Agent):
         self.equip_basic_gear()
         self.status_effects = []
         self.detection_range = 5
+        self.skills = []
 
     def equip_basic_gear(self):
         """Equips the agent with basic starting gear."""
         for slot, item in create_basic_equipment().items():
             self.equipment.equip(item, slot)
+
+    def learn_skill(self, skill_name):
+        """Learns a new skill."""
+        skill = get_skill(skill_name)
+        if skill and skill not in self.skills:
+            self.skills.append(skill)
+            print(f"{self.unique_id} learned the skill: {skill.name}")
+
+    def use_skill(self, skill_name, target=None):
+        """Uses a skill."""
+        skill = next((s for s in self.skills if s.name.lower() == skill_name.lower()), None)
+        if skill:
+            skill.use(self, target)
+        else:
+            print(f"{self.unique_id} doesn't know the skill: {skill_name}")
 
     def move(self, direction):
         """Moves the agent in the specified direction."""
@@ -109,15 +126,24 @@ class SoulslikeAgent(Agent):
         """Calculates the maximum equipment load."""
         return 40 + (self.endurance * 0.5)
 
+    def update_skill_cooldowns(self):
+        """Updates the cooldowns for all skills."""
+        for skill in self.skills:
+            skill.update_cooldown()
+
     def step(self):
         """The agent's step function, called every tick."""
         self.update_status_effects()
+        self.update_skill_cooldowns()
         CombatSystem.regenerate_stamina(self, 1)  # Assuming 1 second per tick
 
 class Player(SoulslikeAgent):
     """Represents the player character."""
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model, AgentType.PLAYER)
+        self.learn_skill("fireball")
+        self.learn_skill("healing_light")
+        self.learn_skill("quick_step")
 
     def step(self):
         super().step()
@@ -127,6 +153,7 @@ class Enemy(SoulslikeAgent):
     """Represents hostile NPCs."""
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model, AgentType.ENEMY)
+        self.learn_skill("fireball")  # Enemies can use skills too
 
     def step(self):
         super().step()
@@ -136,6 +163,7 @@ class Neutral(SoulslikeAgent):
     """Represents neutral or friendly NPCs."""
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model, AgentType.NEUTRAL)
+        self.learn_skill("healing_light")  # Neutral NPCs might have healing abilities
 
     def step(self):
         super().step()

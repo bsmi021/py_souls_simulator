@@ -13,8 +13,7 @@ class AIController:
     @staticmethod
     def update(agent, world):
         """Updates the AI agent's behavior."""
-        # Lazy import to avoid circular import issues.
-        from src.agents import Enemy, Neutral  # Moved here to avoid circular import
+        from src.agents import Enemy, Neutral, Player  # Lazy import to avoid circular import
         
         if isinstance(agent, Enemy):
             AIController.update_enemy(agent, world)
@@ -30,7 +29,7 @@ class AIController:
             distance = world.get_distance(agent.pos, target.pos)
             
             if distance <= 1:  # Adjacent to target
-                AIController.perform_attack(agent, target)
+                AIController.perform_combat_action(agent, target)
             elif distance <= agent.detection_range:
                 AIController.chase(agent, target.pos, world)
             else:
@@ -42,12 +41,13 @@ class AIController:
     def update_neutral(agent, world):
         """Updates the behavior of a neutral agent."""
         AIController.wander(agent, world)
+        if agent.health < agent.max_health * 0.5:  # If health is below 50%
+            agent.use_skill("healing_light")  # Try to use healing skill
 
     @staticmethod
     def find_nearest_player(agent, world):
         """Finds the nearest player to the agent."""
-        # Lazy import to avoid circular import issues.
-        from src.agents import Player  # Only imported when actually needed
+        from src.agents import Player  # Lazy import to avoid circular import
 
         players = [a for a in world.schedule.agents if isinstance(a, Player)]
         if players:
@@ -78,10 +78,21 @@ class AIController:
         AIController.patrol(agent, world)  # For now, wandering is the same as patrolling
 
     @staticmethod
-    def perform_attack(agent, target):
-        """Makes the agent perform an attack on the target."""
-        attack_type = random.choice(list(AttackType))
-        CombatSystem.attack(agent, target, attack_type)
+    def perform_combat_action(agent, target):
+        """Decides and performs a combat action for the agent."""
+        # 70% chance to use a normal attack, 30% chance to use a skill
+        if random.random() < 0.7:
+            attack_type = random.choice(list(AttackType))
+            CombatSystem.attack(agent, target, attack_type)
+        else:
+            available_skills = [skill for skill in agent.skills if skill.can_use(agent)]
+            if available_skills:
+                skill = random.choice(available_skills)
+                agent.use_skill(skill.name, target)
+            else:
+                # If no skills are available, perform a normal attack
+                attack_type = random.choice(list(AttackType))
+                CombatSystem.attack(agent, target, attack_type)
 
     @staticmethod
     def flee(agent, threat, world):

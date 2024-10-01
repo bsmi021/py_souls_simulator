@@ -107,3 +107,19 @@ if __name__ == "__main__":
     print("\nRemaining agent positions:")
     for agent in model.schedule.agents:
         print(f"  Agent {agent.unique_id} ({type(agent).__name__}): {agent.pos}")
+
+
+    # Get the first player and enemy
+    player = next(agent for agent in model.schedule.agents if isinstance(agent, Player))
+    enemy = next(agent for agent in model.schedule.agents if isinstance(agent, Enemy))
+
+    # Simulate some combat with skill usage
+    print(f"Player health: {player.health}, Enemy health: {enemy.health}")
+    player.use_skill("fireball", enemy)
+    print(f"Player used Fireball! Player health: {player.health}, Enemy health: {enemy.health}")
+
+    AIController.perform_combat_action(enemy, player)
+    print(f"Enemy performed an action! Player health: {player.health}, Enemy health: {enemy.health}")
+
+    player.use_skill("healing_light")
+    print(f"Player used Healing Light! Player health: {player.health}, Enemy health: {enemy.health}")
