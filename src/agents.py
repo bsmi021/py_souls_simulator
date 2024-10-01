@@ -1,9 +1,10 @@
 from mesa import Agent
 from enum import Enum
-from src.combat_system import CombatSystem
+from src.combat_system import CombatSystem, AttackType
 from src.ai_behavior import AIController
 from src.item_system import Inventory, Equipment, create_basic_equipment
 from src.skills import get_skill
+import random
 
 class AgentType(Enum):
     PLAYER = 0
@@ -41,6 +42,7 @@ class SoulslikeAgent(Agent):
         self.status_effects = []
         self.detection_range = 5
         self.skills = []
+        self.skill_cooldowns = {}
 
     def equip_basic_gear(self):
         """Equips the agent with basic starting gear."""
@@ -52,15 +54,24 @@ class SoulslikeAgent(Agent):
         skill = get_skill(skill_name)
         if skill and skill not in self.skills:
             self.skills.append(skill)
+            self.skill_cooldowns[skill.name] = 0
             print(f"{self.unique_id} learned the skill: {skill.name}")
 
     def use_skill(self, skill_name, target=None):
         """Uses a skill."""
         skill = next((s for s in self.skills if s.name.lower() == skill_name.lower()), None)
-        if skill:
+        if skill and self.skill_cooldowns[skill.name] == 0:
             skill.use(self, target)
+            self.skill_cooldowns[skill.name] = skill.cooldown
         else:
-            print(f"{self.unique_id} doesn't know the skill: {skill_name}")
+            print(f"{self.unique_id} can't use {skill_name} at this time.")
+
+    def update_skill_cooldowns(self):
+        """Updates the cooldowns for all skills."""
+        for skill_name in self.skill_cooldowns:
+            if self.skill_cooldowns[skill_name] > 0:
+                self.skill_cooldowns[skill_name] -= 1
+
 
     def move(self, direction):
         """Moves the agent in the specified direction."""
@@ -128,8 +139,9 @@ class SoulslikeAgent(Agent):
 
     def update_skill_cooldowns(self):
         """Updates the cooldowns for all skills."""
-        for skill in self.skills:
-            skill.update_cooldown()
+        for skill_name in self.skill_cooldowns:
+            if self.skill_cooldowns[skill_name] > 0:
+                self.skill_cooldowns[skill_name] -= 1
 
     def step(self):
         """The agent's step function, called every tick."""
@@ -147,7 +159,22 @@ class Player(SoulslikeAgent):
 
     def step(self):
         super().step()
-        # Player behavior is controlled by user input, so we don't need AI here
+        # Basic AI for demonstration purposes
+        nearby_enemies = [agent for agent in self.model.grid.get_neighbors(self.pos, moore=True, include_center=False, radius=1)
+                          if isinstance(agent, Enemy)]
+        if nearby_enemies:
+            target = random.choice(nearby_enemies)
+            if self.health < self.max_health * 0.5 and random.random() < 0.3:  # 30% chance to heal if below 50% health
+                self.use_skill("healing_light")
+            else:
+                attack_type = random.choice(list(AttackType))
+                CombatSystem.attack(self, target, attack_type)
+        else:
+            # Move randomly if no enemies nearby
+            possible_steps = self.model.grid.get_neighborhood(self.pos, moore=True, include_center=False)
+            new_position = self.random.choice(possible_steps)
+            self.model.grid.move_agent(self, new_position)
+            self.model.apply_environmental_effect(self)
 
 class Enemy(SoulslikeAgent):
     """Represents hostile NPCs."""

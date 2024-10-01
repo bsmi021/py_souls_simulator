@@ -49,9 +49,16 @@ class AIController:
         """Finds the nearest player to the agent."""
         from src.agents import Player  # Lazy import to avoid circular import
 
-        players = [a for a in world.schedule.agents if isinstance(a, Player)]
+        if agent.pos is None:
+            return None  # If the agent doesn't have a valid position, return None
+
+        players = [a for a in world.schedule.agents if isinstance(a, Player) and a.pos is not None]
         if players:
-            return min(players, key=lambda p: world.get_distance(agent.pos, p.pos))
+            try:
+                return min(players, key=lambda p: world.get_distance(agent.pos, p.pos))
+            except Exception as e:
+                print(f"Error finding nearest player: {e}")
+                return None
         return None
 
     @staticmethod
@@ -97,6 +104,9 @@ class AIController:
     @staticmethod
     def flee(agent, threat, world):
         """Makes the agent flee from a threat."""
+        if agent.pos is None or threat.pos is None:
+            return  # Cannot flee if positions are invalid
+
         opposite_direction = (
             agent.pos[0] - threat.pos[0],
             agent.pos[1] - threat.pos[1]

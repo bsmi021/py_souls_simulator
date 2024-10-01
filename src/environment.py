@@ -1,4 +1,4 @@
-from mesa import Agent, Model
+from mesa import Model
 from mesa.space import MultiGrid
 import numpy as np
 from enum import Enum
@@ -26,19 +26,13 @@ class Cell:
         self.terrain_type = terrain_type
         self.obstacle = None
 
-class Obstacle(Agent):
-    """Represents obstacles in the world."""
-    def __init__(self, unique_id, model, obstacle_type):
-        super().__init__(unique_id, model)
-        self.obstacle_type = obstacle_type
-
 class World(Model):
     """Represents the game world."""
     def __init__(self, width, height):
         super().__init__()
-        self.grid = MultiGrid(width, height, True)
         self.width = width
         self.height = height
+        self.grid = MultiGrid(width, height, True)
         self.cells = [[Cell(x, y) for y in range(height)] for x in range(width)]
         self.initialize_world()
 
@@ -74,44 +68,17 @@ class World(Model):
 
     def add_obstacle(self, x, y, obstacle_type):
         """Adds an obstacle to the world."""
-        obstacle = Obstacle(self.next_id(), self, obstacle_type)
-        self.grid.place_agent(obstacle, (x, y))
-        self.cells[x][y].obstacle = obstacle
+        self.cells[x][y].obstacle = obstacle_type
 
     def set_terrain(self, x, y, terrain_type):
         """Sets the terrain type for a cell."""
         self.cells[x][y].terrain_type = terrain_type
 
-    def calculate_line_of_sight(self, agent1, agent2):
-        """Determines if two agents can see each other using Bresenham's line algorithm."""
-        x1, y1 = agent1.pos
-        x2, y2 = agent2.pos
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        x, y = x1, y1
-        sx = -1 if x1 > x2 else 1
-        sy = -1 if y1 > y2 else 1
-        if dx > dy:
-            err = dx / 2.0
-            while x != x2:
-                if self.cells[x][y].obstacle and self.cells[x][y].obstacle.obstacle_type != ObstacleType.BONFIRE:
-                    return False
-                err -= dy
-                if err < 0:
-                    y += sy
-                    err += dx
-                x += sx
-        else:
-            err = dy / 2.0
-            while y != y2:
-                if self.cells[x][y].obstacle and self.cells[x][y].obstacle.obstacle_type != ObstacleType.BONFIRE:
-                    return False
-                err -= dx
-                if err < 0:
-                    x += sx
-                    err += dy
-                y += sy
-        return True
+    def is_valid_move(self, x, y):
+        """Check if a move to (x, y) is valid."""
+        if 0 <= x < self.width and 0 <= y < self.height:
+            return not self.cells[x][y].obstacle or self.cells[x][y].obstacle == ObstacleType.BONFIRE
+        return False
 
     def get_path(self, start, end):
         """Finds a path between two points using A* algorithm."""
@@ -129,10 +96,10 @@ class World(Model):
         elif terrain == TerrainType.WATER:
             agent.apply_status_effect("wet")  # Apply wet effect
 
-    def is_valid_move(self, x, y):
-        """Check if a move to (x, y) is valid."""
-        if 0 <= x < self.width and 0 <= y < self.height:
-            return not self.cells[x][y].obstacle or self.cells[x][y].obstacle.obstacle_type == ObstacleType.BONFIRE
-        return False
+    def get_distance(self, pos1, pos2):
+        """Calculate the Manhattan distance between two positions."""
+        if pos1 is None or pos2 is None:
+            return float('inf')  # Return infinity if either position is None
+        return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
 
 # Add more environment-related classes and functions as needed

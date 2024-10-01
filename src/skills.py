@@ -13,25 +13,19 @@ class Skill:
         self.skill_type = skill_type
         self.stamina_cost = stamina_cost
         self.cooldown = cooldown
-        self.current_cooldown = 0
 
     def can_use(self, agent):
-        return agent.stamina >= self.stamina_cost and self.current_cooldown == 0
+        return agent.stamina >= self.stamina_cost and agent.skill_cooldowns[self.name] == 0
 
     def use(self, agent, target=None):
         if self.can_use(agent):
             agent.stamina -= self.stamina_cost
-            self.current_cooldown = self.cooldown
             self.effect(agent, target)
         else:
             print(f"{agent.unique_id} cannot use {self.name} at this time.")
 
     def effect(self, agent, target):
         pass  # To be implemented by subclasses
-
-    def update_cooldown(self):
-        if self.current_cooldown > 0:
-            self.current_cooldown -= 1
 
 class FireballSkill(Skill):
     def __init__(self):
@@ -40,8 +34,8 @@ class FireballSkill(Skill):
     def effect(self, agent, target):
         if target:
             damage = 20 + (agent.strength * 0.5)
-            CombatSystem.apply_status_effect(agent, target, "burning")
             target.take_damage(damage)
+            target.apply_status_effect("burning")
             print(f"{agent.unique_id} cast Fireball on {target.unique_id} for {damage} damage!")
 
 class HealingLightSkill(Skill):
