@@ -1,5 +1,8 @@
 from mesa import Agent
 from enum import Enum
+from src.combat_system import CombatSystem
+from src.ai_behavior import AIController
+from src.item_system import Inventory, Equipment, create_basic_equipment
 
 class AgentType(Enum):
     PLAYER = 0
@@ -10,6 +13,9 @@ class StatusEffect(Enum):
     POISON = 0
     WET = 1
     BURNING = 2
+    STAGGERED = 3
+    INVULNERABLE = 4
+    PARRYING = 5
 
 class SoulslikeAgent(Agent):
     """Base class for all agents (players and NPCs)."""
@@ -28,9 +34,16 @@ class SoulslikeAgent(Agent):
         self.endurance = 10
         self.level = 1
         self.experience = 0
-        self.equipment = {}
-        self.inventory = []
+        self.inventory = Inventory(capacity=20)
+        self.equipment = Equipment()
+        self.equip_basic_gear()
         self.status_effects = []
+        self.detection_range = 5
+
+    def equip_basic_gear(self):
+        """Equips the agent with basic starting gear."""
+        for slot, item in create_basic_equipment().items():
+            self.equipment.equip(item, slot)
 
     def move(self, direction):
         """Moves the agent in the specified direction."""
@@ -57,7 +70,7 @@ class SoulslikeAgent(Agent):
 
     def calculate_equip_load(self):
         """Calculates the current equipment load."""
-        return sum(item.weight for item in self.equipment.values())
+        return sum(item.weight for item in self.equipment.slots.values() if item is not None)
 
     def is_overencumbered(self):
         """Checks if the agent is overencumbered."""
@@ -70,17 +83,22 @@ class SoulslikeAgent(Agent):
 
     def update_status_effects(self):
         """Updates and removes expired status effects."""
-        for effect in self.status_effects:
+        for effect in self.status_effects[:]:
             if effect == StatusEffect.POISON:
                 self.take_damage(5)  # Poison deals 5 damage per turn
             elif effect == StatusEffect.BURNING:
                 self.take_damage(10)  # Burning deals 10 damage per turn
+            elif effect in [StatusEffect.STAGGERED, StatusEffect.INVULNERABLE, StatusEffect.PARRYING]:
+                self.status_effects.remove(effect)  # These effects last only one turn
 
     def take_damage(self, amount):
         """Apply damage to the agent."""
-        self.health -= amount
-        if self.health <= 0:
-            self.die()
+        if StatusEffect.INVULNERABLE not in self.status_effects:
+            defense = self.equipment.get_total_defense()
+            damage_taken = max(1, amount - defense)  # Ensure at least 1 damage is taken
+            self.health -= damage_taken
+            if self.health <= 0:
+                self.die()
 
     def die(self):
         """Handle agent death."""
@@ -94,12 +112,7 @@ class SoulslikeAgent(Agent):
     def step(self):
         """The agent's step function, called every tick."""
         self.update_status_effects()
-        self.regenerate_stamina()
-
-    def regenerate_stamina(self):
-        """Regenerates stamina over time."""
-        regen_rate = 5 + (self.endurance * 0.1)
-        self.stamina = min(self.max_stamina, self.stamina + regen_rate)
+        CombatSystem.regenerate_stamina(self, 1)  # Assuming 1 second per tick
 
 class Player(SoulslikeAgent):
     """Represents the player character."""
@@ -108,7 +121,7 @@ class Player(SoulslikeAgent):
 
     def step(self):
         super().step()
-        # Implement player-specific behavior here
+        # Player behavior is controlled by user input, so we don't need AI here
 
 class Enemy(SoulslikeAgent):
     """Represents hostile NPCs."""
@@ -117,7 +130,7 @@ class Enemy(SoulslikeAgent):
 
     def step(self):
         super().step()
-        # Implement enemy AI behavior here
+        AIController.update(self, self.model)
 
 class Neutral(SoulslikeAgent):
     """Represents neutral or friendly NPCs."""
@@ -126,6 +139,15 @@ class Neutral(SoulslikeAgent):
 
     def step(self):
         super().step()
-        # Implement neutral NPC behavior here
+        AIController.update(self, self.model)
 
-# Add more agent-related classes and functions as needed
+def create_agent(agent_type, unique_id, model):
+    """Factory function to create agents of different types."""
+    if agent_type == AgentType.PLAYER:
+        return Player(unique_id, model)
+    elif agent_type == AgentType.ENEMY:
+        return Enemy(unique_id, model)
+    elif agent_type == AgentType.NEUTRAL:
+        return Neutral(unique_id, model)
+    else:
+        raise ValueError(f"Unknown agent type: {agent_type}")
